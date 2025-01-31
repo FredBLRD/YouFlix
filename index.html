@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YTFLIX</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Helvetica Neue', sans-serif;
+        }
+        body { background: #141414; color: white; }
+
+        .navbar {
+            display: flex;
+            padding: 20px 40px;
+            background: #000;
+            position: fixed;
+            width: 100%;
+            z-index: 100;
+            align-items: center;
+        }
+
+        .logo {
+            color: #E50914;
+            font-size: 2em;
+            font-weight: bold;
+            margin-right: 40px;
+        }
+
+        .search-bar {
+            padding: 10px 20px;
+            background: #333;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            width: 500px;
+        }
+
+        .user-menu {
+            margin-left: auto;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .user-menu button {
+            background: #E50914;
+            border: none;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+        }
+
+        .content { padding-top: 100px; }
+
+        .video-section { margin: 30px 40px; }
+
+        .section-title {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+        }
+
+        .video-container {
+            display: flex;
+            overflow-x: auto;
+            gap: 20px;
+            padding-bottom: 20px;
+        }
+
+        .video-card {
+            min-width: 300px;
+            cursor: pointer;
+            transition: transform 0.3s;
+        }
+
+        .video-card:hover { transform: scale(1.05); }
+
+        .thumbnail {
+            width: 100%;
+            height: 180px;
+            object-fit: cover;
+            border-radius: 5px;
+        }
+
+        .video-info {
+            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .channel-page {
+            padding: 100px 40px 40px;
+            display: none;
+        }
+
+        .back-button {
+            background: #E50914;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo">YTFLIX</div>
+        <input type="text" class="search-bar" placeholder="Rechercher..." id="searchInput">
+        <div class="user-menu">
+            <button id="loginBtn">Connexion YouTube</button>
+            <div class="user-profile" id="userProfile" style="display: none;">
+                <img class="user-avatar" id="userAvatar">
+                <button onclick="logout()">Déconnexion</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="content" id="mainContent">
+        <div class="video-section">
+            <h2 class="section-title">Recommandations</h2>
+            <div class="video-container" id="recommendations"></div>
+        </div>
+
+        <div class="video-section">
+            <h2 class="section-title">Musique</h2>
+            <div class="video-container" id="music"></div>
+        </div>
+
+        <div class="video-section">
+            <h2 class="section-title">Jeux vidéo</h2>
+            <div class="video-container" id="gaming"></div>
+        </div>
+    </div>
+
+    <div class="modal" id="videoModal">
+        <iframe width="960" height="540" frameborder="0" allowfullscreen></iframe>
+    </div>
+
+    <div id="channelPage" class="channel-page"></div>
+
+<script>
+const API_KEY = 'AIzaSyDO-FCZGJmp1fPfZ7IaOzAGdQ6MiDJdouo';
+const CLIENT_ID = 'VOTRE_CLIENT_ID.apps.googleusercontent.com';
+const SCOPES = 'https://www.googleapis.com/auth/youtube.readonly';
+let accessToken = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    checkAuth();
+    loadContent();
+    setupEventListeners();
+});
+
+function setupEventListeners() {
+    document.getElementById('loginBtn').addEventListener('click', auth);
+    document.getElementById('searchInput').addEventListener('input', handleSearch);
+}
+
+function checkAuth() {
+    const hashParams = new URLSearchParams(window.location.hash.substr(1));
+    accessToken = hashParams.get('access_token');
+
+    if(accessToken) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+        loadUserProfile();
+    }
+}
+
+function auth() {
+    const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    authUrl.searchParams.set('client_id', CLIENT_ID);
+    authUrl.searchParams.set('redirect_uri', window.location.origin);
+    authUrl.searchParams.set('response_type', 'token');
+    authUrl.searchParams.set('scope', SCOPES);
+    window.location.href = authUrl.toString();
+}
+
+async function loadUserProfile() {
+    try {
+        const response = await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true', {
+            headers: { Authorization: `Bearer ${accessToken}` }
+        });
+
+        const data = await response.json();
+        if(data.items && data.items.length > 0) {
+            const channel = data.items[0];
+            document.getElementById('userAvatar').src = channel.snippet.thumbnails.default.url;
+            document.getElementById('loginBtn').style.display = 'none';
+            document.getElementById('userProfile').style.display = 'flex';
+        }
+    } catch (error) {
+        console.error('Erreur de profil:', error);
+    }
+}
+
+function logout() {
+    accessToken = null;
+    document.getElementById('userProfile').style.display = 'none';
+    document.getElementById('loginBtn').style.display = 'block';
+    window.location.href = 'https://accounts.google.com/o/oauth2/revoke?token=' + accessToken;
+}
+
+async function loadContent() {
+    try {
+        const [recResponse, musicResponse, gamingResponse] = await Promise.all([
+            fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&key=${API_KEY}`),
+            fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=musique&type=video&key=${API_KEY}`),
+            fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=gaming&type=video&key=${API_KEY}`)
+        ]);
+
+        displayVideos(await recResponse.json(), 'recommendations');
+        displayVideos(await musicResponse.json(), 'music');
+        displayVideos(await gamingResponse.json(), 'gaming');
+    } catch (error) {
+        console.error('Erreur de chargement:', error);
+    }
+}
+
+function displayVideos(data, containerId) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+
+    data.items.forEach(item => {
+        const video = item.id?.videoId ? item : { id: item.id, snippet: item.snippet };
+        const card = document.createElement('div');
+        card.className = 'video-card';
+        card.innerHTML = `
+            <img src="${video.snippet.thumbnails.medium.url}" class="thumbnail">
+            <div class="video-info">
+                <h3>${video.snippet.title}</h3>
+                <p>${video.snippet.channelTitle}</p>
+                <button onclick="showChannel('${video.snippet.channelId}')">Voir la chaîne</button>
+            </div>
+        `;
+        card.addEventListener('click', () => playVideo(video.id.videoId || video.id));
+        container.appendChild(card);
+    });
+}
+
+async function handleSearch(event) {
+    const term = event.target.value;
+    if(term.length < 3) return;
+
+    try {
+        const response = await fetch(
+            `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${term}`+
+            `&type=video,channel&key=${API_KEY}`
+        );
+
+        const data = await response.json();
+        displaySearchResults(data.items);
+    } catch (error) {
+        console.error('Erreur de recherche:', error);
+    }
+}
+
+function displaySearchResults(items) {
+    const container = document.getElementById('recommendations');
+    container.innerHTML = '';
+
+    // Afficher les chaînes
+    items.filter(i => i.id.kind === 'youtube#channel').forEach(channel => {
+        const card = document.createElement('div');
+        card.className = 'video-card';
+        card.innerHTML = `
+            <img src="${channel.snippet.thumbnails.default.url}" class="thumbnail">
+            <div class="video-info">
+                <h3>${channel.snippet.title}</h3>
+                <p>Chaîne YouTube</p>
+            </div>
+        `;
+        card.addEventListener('click', () => showChannel(channel.snippet.channelId));
+        container.appendChild(card);
+    });
+
+    // Afficher les vidéos
+    displayVideos({ items: items.filter(i => i.id.kind === 'youtube#video') }, 'recommendations');
+}
+
+function playVideo(videoId) {
+    const modal = document.getElementById('videoModal');
+    modal.style.display = 'flex';
+    modal.querySelector('iframe').src = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+}
+
+async function showChannel(channelId) {
+    try {
+        const [channelRes, videosRes] = await Promise.all([
+            fetch(`https://www.googleapis.com/youtube/v3/channels?part=snippet&id=${channelId}&key=${API_KEY}`),
+            fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${channelId}&type=video&key=${API_KEY}`)
+        ]);
+
+        const channel = (await channelRes.json()).items[0];
+        const videos = await videosRes.json();
+
+        document.getElementById('mainContent').style.display = 'none';
+        const channelPage = document.getElementById('channelPage');
+        channelPage.innerHTML = `
+            <div class="back-button" onclick="location.reload()">← Retour</div>
+            <div style="display: flex; gap: 30px; margin-bottom: 40px;">
+                <img src="${channel.snippet.thumbnails.high.url}" style="width: 120px; border-radius: 50%;">
+                <div>
+                    <h1>${channel.snippet.title}</h1>
+                    <p>${channel.snippet.description}</p>
+                </div>
+            </div>
+            <div class="video-section">
+                <h2>Vidéos récentes</h2>
+                <div class="video-container" id="channelVideos"></div>
+            </div>
+        `;
+
+        channelPage.style.display = 'block';
+        displayVideos(videos, 'channelVideos');
+    } catch (error) {
+        console.error('Erreur de chaîne:', error);
+    }
+}
+
+// Fermer les modals
+document.querySelectorAll('.modal').forEach(modal => {
+    modal.addEventListener('click', (e) => {
+        if(e.target === modal) {
+            modal.style.display = 'none';
+            modal.querySelector('iframe').src = '';
+        }
+    });
+});
+</script>
+</body>
+</html>
