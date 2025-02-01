@@ -147,40 +147,70 @@
             font-size: clamp(0.8rem, 3vw, 0.9rem);
         }
 
-        /* Modal vidéo */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.95);
-            justify-content: center;
-            align-items: center;
-            z-index: 2000;
-        }
-
-        .modal iframe {
-            width: 95%;
-            max-width: 1100px;
-            height: auto;
-            aspect-ratio: 16/9;
-            border: none;
-            border-radius: var(--card-radius);
-        }
-
-        /* Page chaîne */
-        .channel-page {
+        /* Page Vidéo */
+        .video-page {
             padding: 100px 5% 40px;
             display: none;
         }
 
-        .channel-header {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
+        .video-player-container {
+            width: 100%;
+            aspect-ratio: 16/9;
             margin-bottom: 30px;
+        }
+
+        .video-player {
+            width: 100%;
+            height: 100%;
+            border: none;
+            border-radius: var(--card-radius);
+        }
+
+        .video-details {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .video-title {
+            font-size: clamp(1.8rem, 4vw, 2.8rem);
+            margin-bottom: 15px;
+        }
+
+        .metadata {
+            display: flex;
+            gap: 20px;
+            color: var(--text-secondary);
+            margin-bottom: 25px;
+        }
+
+        .channel-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .channel-logo {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .channel-meta h2 {
+            font-size: 1.3rem;
+            margin-bottom: 5px;
+        }
+
+        .subscribers {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .video-description {
+            color: var(--text-secondary);
+            line-height: 1.6;
+            font-size: 0.95rem;
         }
 
         .back-button {
@@ -211,12 +241,6 @@
 
             .content {
                 padding-top: 120px;
-            }
-        }
-
-        @media (hover: none) {
-            .video-card:hover {
-                transform: none;
             }
         }
     </style>
@@ -253,11 +277,27 @@
         </section>
     </main>
 
-    <div class="modal" id="videoModal">
-        <iframe title="Lecteur vidéo YTFLIX" allow="accelerometer; autoplay; encrypted-media; gyroscope" allowfullscreen></iframe>
+    <div id="videoPage" class="video-page">
+        <div class="back-button" onclick="goBack()">← Retour</div>
+        <div class="video-player-container">
+            <iframe class="video-player" allow="accelerometer; autoplay; encrypted-media; gyroscope" allowfullscreen></iframe>
+        </div>
+        <div class="video-details">
+            <h1 class="video-title"></h1>
+            <div class="metadata">
+                <span class="likes"></span>
+                <span class="views"></span>
+            </div>
+            <div class="channel-info">
+                <img class="channel-logo" alt="Logo de la chaîne">
+                <div class="channel-meta">
+                    <h2 class="channel-name"></h2>
+                    <p class="subscribers"></p>
+                </div>
+            </div>
+            <p class="video-description"></p>
+        </div>
     </div>
-
-    <div id="channelPage" class="channel-page"></div>
 
     <script>
     const API_KEY = 'AIzaSyDe8KfIxIM8q4dul7rqBCiJ4wbcG9E-pvs';
@@ -404,52 +444,38 @@
         });
     }
 
-    function playVideo(videoId) {
-        const modal = document.getElementById('videoModal');
-        modal.style.display = 'flex';
-        modal.querySelector('iframe').src = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
-    }
-
-    window.onclick = function(e) {
-        const modal = document.getElementById('videoModal');
-        if(e.target === modal) {
-            modal.style.display = 'none';
-            modal.querySelector('iframe').src = '';
-        }
-    };
-
-    async function showChannel(channelId) {
+    async function playVideo(videoId) {
         try {
-            const [channelData, videosData] = await Promise.all([
-                fetch(`https://www.googleapis.com/youtube/v3/channels?part=snippet&id=${channelId}&key=${API_KEY}`),
-                fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${channelId}&type=video&key=${API_KEY}`)
-            ]);
-
-            const channel = (await channelData.json()).items[0];
-            const videos = await videosData.json();
+            const videoRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=${videoId}&key=${API_KEY}`);
+            const videoData = await videoRes.json();
+            const video = videoData.items[0];
+            
+            const channelRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&id=${video.snippet.channelId}&key=${API_KEY}`);
+            const channelData = await channelRes.json();
+            const channel = channelData.items[0];
 
             document.getElementById('mainContent').style.display = 'none';
-            const channelPage = document.getElementById('channelPage');
-            channelPage.innerHTML = `
-                <div class="back-button" onclick="location.reload()">← Retour</div>
-                <div class="channel-header">
-                    <img src="${channel.snippet.thumbnails.high.url}" class="channel-logo" alt="${channel.snippet.title}">
-                    <div>
-                        <h1>${channel.snippet.title}</h1>
-                        <p>${channel.snippet.description}</p>
-                    </div>
-                </div>
-                <div class="video-section">
-                    <h2 class="section-title">Dernières vidéos</h2>
-                    <div class="video-container" id="channelVideos"></div>
-                </div>
-            `;
-
-            channelPage.style.display = 'block';
-            displayContent(videos, 'channelVideos');
-        } catch(error) {
-            console.error('Erreur chaîne:', error);
+            const videoPage = document.getElementById('videoPage');
+            videoPage.style.display = 'block';
+            
+            videoPage.querySelector('.video-player').src = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+            videoPage.querySelector('.video-title').textContent = video.snippet.title;
+            videoPage.querySelector('.likes').textContent = `${Number(video.statistics.likeCount).toLocaleString()} 👍`;
+            videoPage.querySelector('.views').textContent = `${Number(video.statistics.viewCount).toLocaleString()} vues`;
+            videoPage.querySelector('.video-description').textContent = video.snippet.description;
+            videoPage.querySelector('.channel-logo').src = channel.snippet.thumbnails.default.url;
+            videoPage.querySelector('.channel-name').textContent = video.snippet.channelTitle;
+            videoPage.querySelector('.subscribers').textContent = `${Number(channel.statistics.subscriberCount).toLocaleString()} abonnés`;
+            
+        } catch (error) {
+            console.error('Erreur:', error);
         }
+    }
+
+    function goBack() {
+        document.getElementById('videoPage').style.display = 'none';
+        document.getElementById('mainContent').style.display = 'block';
+        document.querySelector('.video-player').src = '';
     }
     </script>
 </body>
